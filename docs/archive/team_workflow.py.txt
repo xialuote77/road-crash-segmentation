@@ -1,0 +1,365 @@
+# Team workflow for context; individual contribution is the clustering module.
+import pandas as pd
+import numpy as np
+from sklearn.preprocessing import StandardScaler
+import matplotlib.pyplot as plt
+from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.model_selection import train_test_split, cross_val_score, StratifiedKFold
+from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay, classification_report
+from sklearn.preprocessing import OneHotEncoder
+from sklearn.metrics import normalized_mutual_info_score
+
+
+#  Data reading and merging
+person = pd.read_csv('data/raw/person.csv')
+vehicle = pd.read_csv('data/raw/vehicle.csv')
+merged_df = pd.merge(person, vehicle, on=['ACCIDENT_NO', 'VEHICLE_ID'], how='inner')
+
+
+selected_columns = ['HELMET_BELT_WORN', 'SEATING_POSITION', 'VEHICLE_BODY_STYLE', 'INJ_LEVEL_DESC']
+df = merged_df[selected_columns].copy()
+
+
+#  Feature Engineering
+most_common = df["HELMET_BELT_WORN"].mode()[0]
+df["HELMET_BELT_WORN"] = df["HELMET_BELT_WORN"].fillna(most_common)
+
+
+def belt_status(value):
+   if value == 1.0:
+       return 'Worn'
+   elif value == 8.0:
+       return 'Not Worn'
+   else:
+       return 'Irrelevant'
+
+
+df['HELMET_BELT_WORN_STATUS'] = df['HELMET_BELT_WORN'].apply(belt_status)
+
+
+def classify_seating(seat_pos):
+   if seat_pos == 'D':
+       return 'Driver'
+   elif seat_pos in ['LF', 'CF']:
+       return 'Front Passenger'
+   elif seat_pos in ['LR', 'RR', 'CR', 'OR']:
+       return 'Rear Passenger'
+   elif seat_pos in ['PL', 'PS']:
+       return 'Motorcycle Passenger'
+   else:
+       return 'Unknown'
+
+df['SEAT_CATEGORY'] = df['SEATING_POSITION'].apply(classify_seating)
+
+
+def vehicle_classifier(vehicle_type):
+   vehicle_type = str(vehicle_type).upper()
+   if any(x in vehicle_type for x in ['SED', 'SEDAN', 'COUPE', 'CONVRT', 'RDSTR', 'WAGON', 'S WAG', 'P MVR']):
+       return 'Car'
+   elif any(x in vehicle_type for x in ['JEEP', 'SUV', '4WD', 'SWV1', 'SWV2']):
+       return 'SUV/4WD'
+   elif any(x in vehicle_type for x in ['UTE', 'DC UTE', 'UTIL', 'VAN', 'P VAN', 'TRAY', 'CARVN', 'MULTI', 'MULTIX']):
+       return 'Light Commercial'
+   elif any(x in vehicle_type for x in ['TRAILR', 'TR TRK', 'T TRK', 'TANKER', 'TIPPER', 'TILTER', 'C CHAS', 'T SDS', 'DUMPER', 'DOLLY', 'FLOAT', 'S TRL', 'S TANK']):
+       return 'Heavy Truck'
+   elif any(x in vehicle_type for x in ['SOLO', 'MOPED', 'SCOOTR', 'CYCLE', 'TRICAR', 'BIKE', 'BUGGY']):
+       return 'Motorcycle'
+   elif 'BUS' in vehicle_type:
+       return 'Bus'
+   else:
+       return 'Other/Unknown'
+
+
+df['VEHICLE_TYPE'] = df['VEHICLE_BODY_STYLE'].apply(vehicle_classifier)
+
+
+def classify_severity(value):
+   if pd.isna(value):
+       return 'Unknown'
+   value_clean = str(value).strip().lower()
+   if value_clean in ['fatality', 'fatal injury']:
+       return 'Fatal Injury'
+   elif value_clean in ['serious injury']:
+       return 'Serious Injury'
+   elif value_clean in ['other injury']:
+       return 'Other Injury'
+   elif value_clean in ['not injured', 'non-injury']:
+       return 'Non-Injury'
+   else:
+       return 'Unknown'
+
+
+df['SEVERITY_CATEGORY'] = df['INJ_LEVEL_DESC'].apply(classify_severity)
+
+
+
+
+
+# One-Hot Encoding
+df_ONEHOT = pd.get_dummies(
+   df,
+   columns=['HELMET_BELT_WORN_STATUS', 'SEAT_CATEGORY', 'VEHICLE_TYPE'],
+   drop_first=True
+)
+
+
+features_for_clustering = df_ONEHOT.drop(
+   columns=['SEVERITY_CATEGORY', 'HELMET_BELT_WORN', 'SEATING_POSITION', 'VEHICLE_BODY_STYLE', 'INJ_LEVEL_DESC'],
+   errors='ignore'
+)
+
+
+scaler = StandardScaler()
+X_scaled = scaler.fit_transform(features_for_clustering)
+
+
+import seaborn as sns
+
+
+# Seat belt usage vs Severity of Injury
+severity_order = ['Fatal Injury', 'Serious Injury', 'Other Injury', 'Non-Injury']
+ct_belt = pd.crosstab(df['HELMET_BELT_WORN_STATUS'], df['SEVERITY_CATEGORY'], normalize='index').reindex(columns=severity_order, fill_value=0)
+
+
+ct_belt.plot(
+   kind='bar',
+   stacked=True,
+   figsize=(8, 6)
+)
+
+
+plt.title('Seatbelt Usage vs Injury Severity', fontsize=16)
+plt.xlabel('Seatbelt Usage')
+plt.ylabel('Proportion of Severity')
+plt.gca().yaxis.set_major_formatter(plt.FuncFormatter(lambda y, _: f'{y:.0%}'))
+plt.legend(title='Injury Severity', loc='upper right')
+plt.xticks(rotation=0)
+plt.tight_layout()
+plt.show()
+
+
+# visually display the distribution of injury severity at different seat positions
+ct = pd.crosstab( df['SEAT_CATEGORY'], df['SEVERITY_CATEGORY'], normalize='index').reindex(columns=severity_order, fill_value=0)
+ct.plot(kind='bar', stacked=True, figsize=(8, 6))
+plt.title('Seat Position vs Severity Level', fontsize=16)
+plt.xlabel('Seat Position')
+plt.ylabel('Proportion of Severity')
+plt.tight_layout()
+plt.show()
+
+
+# different vehicle types effect the severity
+severity_order = ['Fatal Injury', 'Serious Injury', 'Other Injury', 'Non-Injury']
+
+
+ct_vehicle = pd.crosstab(df['VEHICLE_TYPE'], df['SEVERITY_CATEGORY'], normalize='index').reindex(columns=severity_order, fill_value=0)
+ct_vehicle.plot(kind='bar', stacked=True, figsize=(8, 6), color=['darkred', 'orange', 'lightgreen', 'skyblue'])
+
+
+plt.title('Vehicle Type vs Severity Level', fontsize=16)
+plt.xlabel('Vehicle Type')
+plt.ylabel('Proportion of Severity')
+plt.gca().yaxis.set_major_formatter(plt.FuncFormatter(lambda y, _: f'{y:.0%}'))
+plt.legend(title='Severity Category', loc='upper right')
+plt.tight_layout()
+plt.show()
+
+
+
+# heatmap :variable relationship
+from sklearn.preprocessing import LabelEncoder
+
+
+selected_cols = ['HELMET_BELT_WORN_STATUS', 'SEAT_CATEGORY', 'VEHICLE_TYPE', 'SEVERITY_CATEGORY']
+
+
+df_selected = df[selected_cols].copy()
+le = LabelEncoder()
+for col in selected_cols:
+  df_selected[col] = le.fit_transform(df_selected[col])
+
+
+nmi_matrix = pd.DataFrame(index=selected_cols, columns=selected_cols)
+for col1 in selected_cols:
+  for col2 in selected_cols:
+      nmi = normalized_mutual_info_score(df_selected[col1], df_selected[col2])
+      nmi_matrix.loc[col1, col2] = round(nmi, 2)
+
+
+nmi_matrix = nmi_matrix.astype(float)
+
+
+
+
+plt.figure(figsize=(8, 6))
+sns.heatmap(nmi_matrix, annot=True, cmap='YlGnBu', vmin=0, vmax=1)
+plt.title('Normalized Mutual Information (NMI) Heatmap', fontsize=16)
+plt.tight_layout()
+plt.show()
+
+
+# Chi-Squared Test for Independence
+from scipy.stats import chi2_contingency
+seat_severity_freq = pd.crosstab(df['SEAT_CATEGORY'], df['SEVERITY_CATEGORY'])
+chi2, p, dof, expected = chi2_contingency(seat_severity_freq)
+print(f"Chi-squared statistic: {chi2:.2f}")
+print(f"p-value: {p:.5f}")
+
+
+# Clustering
+c
+
+plt.plot(K, wcss, marker = 'o')
+plt.xlabel('Number of Clusters (k)')
+plt.ylabel('Within Cluster Sum of Squared Distance')
+plt.title('Elbow Method for Optimal k')
+plt.grid(True)
+plt.tight_layout()
+plt.savefig("Elbow Method")
+
+#Hard to tell from Elbow Method graph, Compare k=3 and k=4 to decide the k_optimal
+sample_idx = np.random.choice(X_scaled.shape[0], size = 5000, replace = False)
+score_k3 = silhouette_score(X_scaled[sample_idx], labels[3][sample_idx])
+score_k4 = silhouette_score(X_scaled[sample_idx], labels[4][sample_idx])
+print(f'Silhouette Score(sampled, k=3): {score_k3:.4f}')
+print(f'Silhouette Score(sampled, k=4): {score_k4:.4f}')
+
+
+k_optimal = 5
+df['CLUSTER'] = labels[k_optimal]
+clustered_df = df[['HELMET_BELT_WORN_STATUS', 'SEAT_CATEGORY', 'VEHICLE_TYPE', 'SEVERITY_CATEGORY', 'CLUSTER']]
+clustered_df.to_csv("Clustered_Risk_Groups.csv", index=False)
+severity_by_cluster = pd.crosstab(df['CLUSTER'], df['SEVERITY_CATEGORY'], normalize = 'index') * 100
+severity_by_cluster.round(2).to_csv('Severity distribution per cluster.csv')
+
+
+cluster_counts = df['CLUSTER'].value_counts().sort_index()
+cluster_counts_df = cluster_counts.reset_index()
+cluster_counts_df.columns = ['CLUSTER', 'Number of Samples']
+cluster_counts_df['Percentage'] = (cluster_counts_df['Number of Samples'] / len(df) * 100).round(2)
+cluster_counts_df.to_csv("Cluster_Sample_Counts.xlsx", index=False)
+
+# stacked bar chart
+plt.figure(figsize = (10, 5))
+severity_by_cluster.plot(kind='bar', stacked=True, colormap='YlGnBu')
+plt.title('Injury Severity Distribution by Cluster')
+plt.xlabel('Cluster Label')
+plt.ylabel('Percentage')
+plt.legend(title='Severity Category', bbox_to_anchor=(1.05, 1))
+plt.tight_layout()
+plt.grid(axis = 'y')
+plt.show()
+
+
+# heatmap
+cluster_summary = pd.DataFrame()
+categorical_vars = ['HELMET_BELT_WORN_STATUS', 'SEAT_CATEGORY', 'VEHICLE_TYPE', 'SEVERITY_CATEGORY']
+
+for var in categorical_vars:
+   temp = pd.crosstab(df['CLUSTER'], df[var], normalize = 'index') * 100
+   cluster_summary = pd.concat([cluster_summary, temp], axis=1)
+
+cluster_summary.round(2).to_excel("Cluster_Behaviour_Profiles.xlsx")
+
+plt.figure(figsize = (20,10))
+sns.heatmap(cluster_summary.T, cmap='coolwarm', annot=True, fmt='.1f')
+plt.title('Cluster Profiles Heatmap')
+plt.xlabel('Cluster')
+plt.ylabel('Feature Categories')
+plt.tight_layout()
+plt.savefig("k = 4 heatmap")
+
+
+
+df = pd.read_csv('cleaned_data.csv', usecols =(['HELMET_BELT_WORN_STATUS', 'SEAT_CATEGORY', 'VEHICLE_TYPE', 'SEVERITY_CATEGORY']))
+X = df[['HELMET_BELT_WORN_STATUS', 'SEAT_CATEGORY', 'VEHICLE_TYPE']]
+y = df['SEVERITY_CATEGORY']
+
+
+# Check severity category distribution
+print(f"Severity Distribution: ")
+print(df['SEVERITY_CATEGORY'].value_counts(normalize=True))
+
+
+# Encode X using OneHotEncoder
+encoder = OneHotEncoder(sparse_output=False, handle_unknown="ignore")
+X_encoded = encoder.fit_transform(X)
+# Encode y using LabelEncoder
+le = LabelEncoder()
+y_encoded = le.fit_transform(y)
+
+
+#Splitting data into training and testing datasets
+X_train, X_test, y_train, y_test = train_test_split(X_encoded, y_encoded, test_size=0.2, random_state=42, stratify=y_encoded)
+
+
+# Create and fit the linear model
+# lr = Logistic Regression Model (variable name)
+lr = LogisticRegression(max_iter=1000, class_weight='balanced', random_state=42)
+
+
+# Perform 5-fold Stratified Cross validation for lr
+cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+cv_scores_lr = cross_val_score(lr, X_encoded, y_encoded, cv=cv, scoring='accuracy')
+print(f"Logistic Regression Accuracy (Cross-Validation):{np.mean(cv_scores_lr):.2f} (±{np.std(cv_scores_lr):.2f})")
+
+
+# Train lr model and predict
+lr.fit(X_train, y_train)
+y_pred_lr = lr.predict(X_test)
+# Print Classification Report for lr model
+print("\nClassfication report (Logistic Regression):")
+print(classification_report(y_test, y_pred_lr, target_names=le.classes_))
+
+
+# Plot Confusion matrix for lr model
+cm_lr = confusion_matrix(y_test, y_pred_lr)
+ConfusionMatrixDisplay(confusion_matrix=cm_lr, display_labels=le.classes_).plot()
+plt.title('Logistic Regression Confusion Matrix')
+plt.tight_layout()
+plt.show()
+
+
+
+# Create and fit Non-linear model
+# rf = RandomForestclassifier model
+rf = RandomForestClassifier(n_estimators=100, max_depth=15, min_samples_leaf=10, class_weight='balanced', random_state=42)
+# Perform 5-fold Stratified Cross validation for rf
+cv_scores_rf = cross_val_score(rf, X_encoded, y_encoded, cv=cv, scoring='accuracy')
+print(f"Random Forest Accuracy (Cross-Validation): {np.mean(cv_scores_rf):.2f} (±{np.std(cv_scores_rf):.2f})")
+
+
+# Train model and predict
+rf.fit(X_train, y_train)
+y_pred_rf = rf.predict(X_test)
+
+
+# Print Classification for rf model
+print("\nClassfication report (Random Forest):")
+print(classification_report(y_test, y_pred_rf, target_names=le.classes_))
+
+
+# rf Confusion matrix
+cm_rf = confusion_matrix(y_test, y_pred_rf)
+ConfusionMatrixDisplay(confusion_matrix=cm_rf, display_labels=le.classes_).plot()
+plt.title('Random Forest Confusion Matrix')
+plt.tight_layout()
+plt.show()
+
+
+# Feature importance
+encoded_features = encoder.get_feature_names_out(X.columns)
+importances = rf.feature_importances_
+# Sort by importance from high to low
+sorted_idx = np.argsort(importances)[::-1]  # Use [::-1] descending order
+sorted_features = encoded_features[sorted_idx]
+sorted_importances = importances[sorted_idx]
+# Feature Importance scores graph
+plt.figure(figsize=(8, 5))
+plt.barh(sorted_features, sorted_importances)
+plt.xlabel('Importance Scores')
+plt.title('Feature Importance from Random Forest')
+plt.gca().invert_yaxis()
+plt.tight_layout()
+plt.show()
