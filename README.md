@@ -1,5 +1,16 @@
 # Road-Crash Segmentation: Reproducible Portfolio Reconstruction
 
+## 中文概览
+
+**项目定位：探索性分群 / 行为画像 / 分析复核。** 根据安全带状态、座位和车辆类别进行聚类，再单独比较各组伤害严重程度。
+
+- **个人贡献**：原团队项目中负责聚类模块，以及报告、presentation 中的聚类部分；不包含团队数据预处理和监督分类模块。
+- **整理后的复核**：针对历史代码、报告和 CSV 版本不一致的问题，单独补齐运行入口，在 **400,863 行**清洗数据上重跑 K=3/4/5，并保留新旧结果的清楚区分。
+- **方法**：one-hot 编码、标准化、KMeans、固定随机种子及 5,000 行样本的 silhouette 比较；伤害严重程度只用于事后画像，不进入聚类。
+- **结论边界**：当前分组主要反映车辆类别；“Other/Unknown”占比高的群体首先提示数据解释问题，不能直接包装成可靠业务客群或因果风险因素。当前重构不追认原报告中冲突的结论。
+
+## English documentation
+
 Explore road-user groups using belt status, seating position and vehicle type, then describe injury-severity distributions separately. This portfolio separates an inconsistent historical coursework snapshot from a new, reproducible reconstruction.
 
 ## My contribution
