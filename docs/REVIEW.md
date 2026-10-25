@@ -7,3 +7,8 @@ Recomputed on the full supplied cleaned CSV with Python 3.13, scikit-learn 1.8.0
 The input SHA-256 is de00a87b7ed9a3a101d7f350053a720bc6c7e72eba2a7ada1b33e6793a1efe37. This identifies the local input without redistributing it.
 
 A full stability assessment across seeds/bootstrap samples was not performed. Data cleaning is inherited from the team and has not been independently audited. Standardising one-hot columns may over-weight rare categories. Saved groups are exploratory rather than operational personas or causal risk factors.
+
+
+## Historical communication materials
+
+The original report and slides are now linked under reports/ for communication evidence. The report public copy adds a provenance cover and removes the original first-page author/contact block. Pages 2-14 retain text identical to the original. The 21-slide presentation is copied unchanged. These retain original unsupported or conflicting historical interpretations, explicitly marked in reports/README.md. The slides also contain an incorrect verbal silhouette formula. Current reconstructed evidence takes precedence.
