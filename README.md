@@ -9,6 +9,13 @@
 - **方法**：one-hot 编码、标准化、KMeans、固定随机种子及 5,000 行样本的 silhouette 比较；伤害严重程度只用于事后画像，不进入聚类。
 - **结论边界**：当前分组主要反映车辆类别；“Other/Unknown”占比高的群体首先提示数据解释问题，不能直接包装成可靠业务客群或因果风险因素。当前重构不追认原报告中冲突的结论。
 
+## 报告与展示
+
+- [课程报告（公开副本）](reports/historical-team-report.pdf)：保留原报告，移除学号和邮箱，新增复核说明。
+- [原团队 slides（21 页 PPTX）](reports/historical-team-slides.pptx)：保留原始展示，个人贡献为聚类相关部分。
+
+两份材料均为历史课程成果，旧聚类结论与当前重跑结果有差异。请结合[材料说明](reports/README.md)阅读，以首页和 `results/recomputed/` 的结果为当前依据。
+
 ## English documentation
 
 Explore road-user groups using belt status, seating position and vehicle type, then describe injury-severity distributions separately. This portfolio separates an inconsistent historical coursework snapshot from a new, reproducible reconstruction.
@@ -46,4 +53,4 @@ The original CSV counts described almost all records in one group; another table
 
 The new results above supersede those snapshots for this portfolio presentation. They do not retroactively validate the submitted report. No causal claim is made about seatbelt use or injury severity.
 
-Originally COMP20008 Assignment 2, University of Melbourne. Team attribution is retained; member contact details, signed contracts, full group report and raw/person-level data are excluded.
+Originally COMP20008 Assignment 2, University of Melbourne. Team attribution is retained; member contact details, signed contracts and raw/person-level data are excluded. A public copy of the historical full team report and original presentation is retained under [reports/](reports/README.md), with explicit provenance and reconciliation notes.
